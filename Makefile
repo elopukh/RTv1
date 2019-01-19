@@ -19,7 +19,7 @@ LIB_DIR = libft/
 
 LFT = $(addprefix $(LIB_DIR), $(LIB_NAME))
 
-C_FILES =	main.c
+C_FILES =	new.c intersection.c func.c
 
 HEADERS = $(INC_DIR)RTv1.h $(LIB_DIR)libft.h
 

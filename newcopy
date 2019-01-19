@@ -1,0 +1,349 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   new.c                                              :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: elopukh <marvin@42.fr>                     +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2018/09/13 14:52:11 by elopukh           #+#    #+#             */
+/*   Updated: 2018/09/13 14:52:12 by elopukh          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "RTv1.h"
+
+void	pixel_put_img(t_window *win, int x, int y, int colour)
+{
+	if (x < H_WIN || y < W_WIN)
+	{
+		colour = mlx_get_color_value(win->mlx_ptr, colour);
+		ft_memcpy(win->img + 4 * W_WIN * y + x * 4, &colour, sizeof(int));
+	}
+}
+
+t_vect mult_v(double chis, t_vect vect)
+{
+	t_vect new;
+
+	new.x = chis * vect.x;
+	new.y = chis * vect.y;
+	new.z = chis * vect.z;
+	return (new);
+}
+
+t_vect plus_v(t_vect vect1, t_vect vect2)
+{
+	t_vect new;
+
+	new.x = vect1.x + vect2.x;
+	new.y = vect1.y + vect2.y;
+	new.z = vect1.z + vect2.z;
+	return (new);
+}
+t_vect minus_v(t_vect O, t_vect C)
+{
+    t_vect new;
+
+    new.x = O.x - C.x;
+    new.y = O.y - C.y;
+    new.z = O.z - C.z;
+    return (new);
+}
+double vect_len(t_vect vect)
+{
+	double len;
+	
+	len = sqrt(pow(vect.x,2) + pow(vect.y,2) + pow(vect.z,2));
+	return (len);
+}
+
+double dot(t_vect a, t_vect b)
+{
+    return (a.x * b.x + a.y * b.y + a.z * b.z);
+}
+
+double ComputeLighting(t_vect p,t_vect norm, t_light *light)
+{
+	double i;
+	t_vect l;
+	double n_dot_l;
+
+	i = 0;
+	if (light->type == 'a')
+	{
+		i += light->intensity;
+	}
+	else 
+	{
+		if (light->type == 'p')
+			l = minus_v(light->position, p);
+		else
+			l = light->direction;
+		n_dot_l = dot(norm, l);
+		if (n_dot_l > 0)
+			i += light->intensity * n_dot_l / (vect_len(norm) * vect_len(l));
+	}
+	return (i);
+}
+
+t_vect IntersectRaySphere(t_window *win, t_sphere *Sphere)
+{
+	t_vect oc = minus_v(win->O, Sphere->center);
+	t_vect ret;
+	printf("%f %f %f\n",Sphere->center.x,Sphere->center.y,Sphere->center.z);
+    double k1 = dot(win->D, win->D);
+    double k2 = 2.0 * dot(oc, win->D);
+    double k3 = dot(oc, oc) - Sphere->radius * Sphere->radius;
+
+    double discriminant = k2*k2 - 4*k1*k3;
+	if (discriminant < 0)
+	{
+		ret.x = 600000.0;
+		ret.y = 600000.0;
+		ret.z = 600000.0;
+		return (ret);
+	}
+	ret.x = (-k2 + sqrt(discriminant)) / (2 * k1);
+	ret.y = (-k2 - sqrt(discriminant)) / (2 * k1);
+	ret.z = 0;
+    return (ret);
+}
+
+t_vect IntersectRayCyl(t_window *win, t_cyl *Cyl)
+{
+	t_vect oc = minus_v(win->O, Cyl->center);
+	t_vect ret;
+	// printf("%f %f %f\n",Cyl->v.x,Cyl->v.y,Cyl->v.z);
+    double k1 = dot(win->D, win->D) - (dot(win->D, Cyl->v) * dot(win->D, Cyl->v));
+    double k2 = 2.0 *(dot(oc, win->D) - dot(oc, Cyl->v) * dot(win->D,Cyl->v));
+    double k3 = dot(oc, oc) - pow(dot(oc, Cyl->v),2) - Cyl->radius * Cyl->radius;
+	//printf("%f %f %f\n",k1,k2,k3);
+	//printf("%f %f %f\n",k2);
+    double discriminant = k2*k2 - 4*k1*k3;
+	if (discriminant < 0)
+	{
+		ret.x = 600000.0;
+		ret.y = 600000.0;
+		ret.z = 600000.0;
+		return (ret);
+	}
+	ret.x = (-k2 + sqrt(discriminant)) / (2 * k1);
+	ret.y = (-k2 - sqrt(discriminant)) / (2 * k1);
+	ret.z = 0;
+    return (ret);
+}
+int ret_col_cyl(t_window *win, t_cyl *Cyl)
+{
+	int ret_col = 0;
+	t_vect oc = minus_v(win->O, Cyl->center);
+	win->p = plus_v(win->O, mult_v(win->closest_d, win->D));
+	double m = dot(oc, Cyl->v) + dot(win->D, Cyl->v) * win->t1.x;
+	win->norm = minus_v(minus_v(win->p, Cyl->center),mult_v(m,Cyl->v));
+	win->norm = mult_v((1 / vect_len(win->norm)),win->norm);
+	ret_col += (Cyl->colour & 255) * ComputeLighting(win->p, win->norm, (t_light *)(win->light->content));
+	ret_col += (int)((Cyl->colour >> 8 & 255) * ComputeLighting(win->p, win->norm, (t_light *)(win->light->content))) << 8;
+	ret_col += (int)((Cyl->colour >> 16 & 255) * ComputeLighting(win->p, win->norm, (t_light *)(win->light->content))) << 16;
+	return (ret_col);
+}
+int ret_col_sph(t_window *win, t_sphere *Sphere)
+{
+	int ret_col = 0;
+	win->p = plus_v(win->O, mult_v(win->closest_d, win->D));
+	win->norm = minus_v(win->p, Sphere->center);
+	win->norm = mult_v((1 / vect_len(win->norm)),win->norm);
+	ret_col += (Sphere->colour & 255) * ComputeLighting(win->p, win->norm, (t_light *)(win->light->content));
+	ret_col += (int)((Sphere->colour >> 8 & 255) * ComputeLighting(win->p, win->norm, (t_light *)(win->light->content))) << 8;
+	ret_col += (int)((Sphere->colour >> 16 & 255) * ComputeLighting(win->p, win->norm, (t_light *)(win->light->content))) << 16;
+	return (ret_col);
+}
+int ret_color(t_window *win, t_list *clos)
+{
+	int ret_col = 0;
+	if (clos->content_size == 0)
+	{
+		ret_col = ret_col_cyl(win,(clos->content));
+	}
+	if(clos->content_size == 1)
+	{
+		ret_col = ret_col_sph(win,(t_sphere *)(clos->content));
+	}
+	return (ret_col);
+}
+t_clos		init_clos(t_list *obj)
+{
+	t_clos	clos;
+
+	clos.obj = obj;
+	return (clos);
+}
+int TraceRay(t_window *win)
+{
+	int ret_col = 0;
+	win->closest_d = 600000.0;
+	t_list	*obj;
+	t_clos clos = init_clos(NULL);
+	obj = win->obj;
+	// printf("win = %zu\n", win->obj->content_size);
+	// printf("obj = %zu\n", obj->content_size);
+	// printf("win = %zu\n", win->obj->next->content_size);
+	// printf("obj = %zu\n", obj->next->content_size);
+	printf("obj = %d\n", (int)(win->obj->content->radius));
+	while (obj)
+	{
+		// if (obj->content_size == 0)
+		// {
+		// 	win->t1 = IntersectRayCyl(win, win->obj->content);
+		// }
+		if (obj->content_size == 1)
+			win->t1 = IntersectRaySphere(win, (t_sphere *)win->obj->content);
+   		if (win->t1.x >= 1.0 && win->t1.x <= 600000.0 && win->t1.x < win->closest_d)
+		{
+			clos.obj = obj;
+			win->closest_d = win->t1.x;
+		}
+		if (win->t1.y >= 1.0 && win->t1.y <= 600000.0 && win->t1.y < win->closest_d)
+		{
+			clos.obj = obj;
+			win->closest_d = win->t1.y;
+		}
+		obj = obj->next;
+	}
+	if (clos.obj == NULL)
+		return (0xFFFFFF);
+	ret_col = ret_color(win, clos.obj);//(t_cyl *)(win->obj->content));
+	return (ret_col);
+}
+
+t_vect CanvasToViewport(t_window *win)
+{
+    t_vect a;
+    a.x = (double)win->x / W_WIN;
+    a.y = (double)win->y / H_WIN;
+    a.z = win->dist;
+    return (a);
+}
+
+void scene1(t_window *win)
+{
+	win->O.x = 0;
+	win->O.y = 0;
+	win->O.z = 0;
+	win->x = -H_WIN / 2;
+	while (win->x < W_WIN / 2)
+    {
+        win->y = -H_WIN / 2;
+        while (win->y < H_WIN / 2)
+        {
+			win->D = CanvasToViewport(win);
+			win->colourput = TraceRay(win);
+			pixel_put_img(win, win->x + H_WIN / 2, H_WIN / 2 - win->y - 1, win->colourput);
+			win->y++;
+		}
+		win->x++;
+	}
+	mlx_put_image_to_window(win->mlx_ptr, win->win_ptr, win->img_ptr, 0, 0);
+}
+int		key_handler(int key, void *p)
+{
+	t_window *win;
+
+	win = (t_window*)p;
+	if (key == 53)
+		exit(1);
+	// if (key == 126)
+	// {
+	// 	win->Sphere.center.y -= 10;
+	// 	scene1(win);
+	// }
+	// if (key == 125)
+	// {
+	// 	win->Sphere.center.y += 10;
+	// 	scene1(win);
+	// }
+	// if (key == 123)
+	// {
+	// 	win->Sphere.center.x += 10;
+	// 	scene1(win);
+	// }
+	// if (key == 124)
+	// {
+	// 	win->Sphere.center.x -= 10;
+	// 	scene1(win);
+	// }
+	// if (key == 0)
+	// {
+	// 	win->Sphere.center.z -= 5;
+	// 	scene1(win);
+	// }
+	// if (key == 1)
+	// {
+	// 	win->Sphere.center.z += 5;
+	// 	scene1(win);
+	// }
+	 return (1);
+}
+
+void	loop(t_window *win)
+{
+	mlx_hook(win->win_ptr, 2, 1L << 0, key_handler, win);
+	mlx_loop(win->mlx_ptr);
+}
+
+void	initdata(t_window *win)
+{
+	win->size_line = W_WIN;
+	win->bpp = 32;
+	win->endian = 0;
+	win->img =
+	mlx_get_data_addr(win->img_ptr, &win->bpp, &win->size_line, &win->endian);
+}
+
+
+void	init(t_window *win)
+{
+	win->mlx_ptr = mlx_init();
+	win->win_ptr = mlx_new_window(win->mlx_ptr, H_WIN, W_WIN, "Window 1!");
+	win->img_ptr = mlx_new_image(win->mlx_ptr, H_WIN, W_WIN);
+	initdata(win);
+}
+
+int main()
+{
+    t_window *win;
+	t_list	*new;
+	t_sphere		Sphere;
+	t_cyl Cyl;
+	t_light light;
+	win = (t_window*)malloc(sizeof(t_window));
+	Sphere.colour = 0xFF0000;
+	Sphere.center.x = 0;
+	Sphere.center.y = 0;
+	Sphere.center.z = 5;
+	Sphere.radius = 0.9;
+	Cyl.colour = 0xFF0000;
+	Cyl.center.x = 0;
+	Cyl.center.y = 1;
+	Cyl.center.z = 5;
+	Cyl.radius = 1;
+	Cyl.v.x = 0;
+	Cyl.v.y = 1;
+	Cyl.v.z = 0;
+	new = ft_lstnew(&Cyl, 0);
+	ft_lstadd(&(win->obj), new);
+	new = ft_lstnew(&Sphere, 1);
+	ft_lstadd(&(win->obj), new);
+	win->dist = 1;
+	light.type = 'p';
+	light.position.x =	2;
+	light.position.y = 1;
+	light.position.z = 0;
+	light.intensity = 0.9;
+	light.direction.x = -250;
+	light.direction.y = -250;
+	light.direction.z = 0;
+	new = ft_lstnew(&light, sizeof(t_light));
+	ft_lstadd(&(win->light), new);
+	init(win);
+    scene1(win);
+	loop(win);
+}
